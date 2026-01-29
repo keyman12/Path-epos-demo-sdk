@@ -143,17 +143,28 @@ struct TransactionLogRowView: View {
             
             Group {
                 if entry.type == .sale {
-                    Button(action: onRefund) {
-                        Text("Refund")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(hex: "#FF5252"))
-                            .cornerRadius(8)
+                    if let refundedAt = entry.refundedAt {
+                        VStack(alignment: .center, spacing: 2) {
+                            Text(dateFormatter.string(from: refundedAt))
+                                .font(.caption)
+                            Text(timeFormatter.string(from: refundedAt))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(minWidth: 80, maxWidth: .infinity, alignment: .center)
+                    } else {
+                        Button(action: onRefund) {
+                            Text("Refund")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color(hex: "#FF5252"))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 } else {
                     Text("—")
                         .font(.subheadline)

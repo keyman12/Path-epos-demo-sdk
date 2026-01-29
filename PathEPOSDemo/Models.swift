@@ -45,8 +45,9 @@ struct TerminalTransactionLogEntry: Identifiable, Codable {
     let status: TerminalTransactionStatus  // Success or Decline
     let reqId: String?             // original request id from Pico (for reference/refund)
     let isCash: Bool               // true = cash transaction (no card); display "Cash"
+    let refundedAt: Date?          // when this sale was refunded (nil = not refunded)
     
-    init(id: UUID = UUID(), urn: String, date: Date = Date(), cardLastFour: String, amountMinor: Int, currency: String, type: TerminalTransactionType, status: TerminalTransactionStatus, reqId: String?, isCash: Bool = false) {
+    init(id: UUID = UUID(), urn: String, date: Date = Date(), cardLastFour: String, amountMinor: Int, currency: String, type: TerminalTransactionType, status: TerminalTransactionStatus, reqId: String?, isCash: Bool = false, refundedAt: Date? = nil) {
         self.id = id
         self.urn = urn
         self.date = date
@@ -57,15 +58,21 @@ struct TerminalTransactionLogEntry: Identifiable, Codable {
         self.status = status
         self.reqId = reqId
         self.isCash = isCash
+        self.refundedAt = refundedAt
     }
     
     /// Display in log: "Cash" for cash transactions, else "**** **** **** 1234"
     var cardMasked: String { isCash ? "Cash" : "**** **** **** \(cardLastFour)" }
     var amountPounds: Double { Double(amountMinor) / 100.0 }
     var formattedAmount: String { "£\(String(format: "%.2f", amountPounds))" }
+
+    /// Returns a copy of this entry with `refundedAt` set (for updating the log when a sale is refunded).
+    func withRefundedAt(_ date: Date) -> TerminalTransactionLogEntry {
+        TerminalTransactionLogEntry(id: id, urn: urn, date: self.date, cardLastFour: cardLastFour, amountMinor: amountMinor, currency: currency, type: type, status: status, reqId: reqId, isCash: isCash, refundedAt: date)
+    }
     
     enum CodingKeys: String, CodingKey {
-        case id, urn, date, cardLastFour, amountMinor, currency, type, status, reqId, isCash
+        case id, urn, date, cardLastFour, amountMinor, currency, type, status, reqId, isCash, refundedAt
     }
     
     init(from decoder: Decoder) throws {
@@ -80,6 +87,7 @@ struct TerminalTransactionLogEntry: Identifiable, Codable {
         status = try c.decode(TerminalTransactionStatus.self, forKey: .status)
         reqId = try c.decodeIfPresent(String.self, forKey: .reqId)
         isCash = try c.decodeIfPresent(Bool.self, forKey: .isCash) ?? false
+        refundedAt = try c.decodeIfPresent(Date.self, forKey: .refundedAt)
     }
 }
 

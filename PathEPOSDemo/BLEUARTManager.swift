@@ -49,6 +49,7 @@ final class BLEUARTManager: NSObject, ObservableObject {
     private var pendingScan: Bool = false
 
     private var pendingSale: (amount: Int, currency: String, tip: Int?)?
+    private var pendingRefundOriginalEntryId: UUID?
     private let transactionLogKey = "TerminalTransactionLog"
 
     override init() {
@@ -89,6 +90,28 @@ final class BLEUARTManager: NSObject, ObservableObject {
             isCash: true
         )
         transactionLog.insert(entry, at: 0)
+        saveTransactionLog()
+    }
+
+    /// Records a cash refund: adds a Refund log entry and marks the original sale as refunded.
+    func recordCashRefund(originalEntry: TerminalTransactionLogEntry) {
+        guard let idx = transactionLog.firstIndex(where: { $0.id == originalEntry.id }) else { return }
+        let refundedAt = Date()
+        let updatedSale = originalEntry.withRefundedAt(refundedAt)
+        transactionLog[idx] = updatedSale
+        let refundUrn = "URN-\(UUID().uuidString.prefix(8).uppercased())"
+        let refundEntry = TerminalTransactionLogEntry(
+            urn: refundUrn,
+            date: refundedAt,
+            cardLastFour: "",
+            amountMinor: originalEntry.amountMinor,
+            currency: originalEntry.currency,
+            type: .refund,
+            status: .success,
+            reqId: nil,
+            isCash: true
+        )
+        transactionLog.insert(refundEntry, at: 0)
         saveTransactionLog()
     }
 
@@ -165,11 +188,12 @@ final class BLEUARTManager: NSObject, ObservableObject {
         sendJSONLine(message)
     }
 
-    func startRefund(amountMinor: Int, currency: String, originalReqId: String? = nil) {
+    func startRefund(amountMinor: Int, currency: String, originalReqId: String? = nil, originalEntryId: UUID? = nil) {
         guard isReady else {
             log("Not connected. Connect to terminal first to process refund.")
             return
         }
+        pendingRefundOriginalEntryId = originalEntryId
         var args: [String: Any] = [
             "amount": amountMinor,
             "currency": currency
@@ -301,6 +325,13 @@ final class BLEUARTManager: NSObject, ObservableObject {
                             isCash: false
                         )
                         transactionLog.insert(entry, at: 0)
+                        // If this was a Refund result, mark the original sale as refunded
+                        if cmd == "Refund", let originalId = pendingRefundOriginalEntryId,
+                           let idx = transactionLog.firstIndex(where: { $0.id == originalId }) {
+                            let original = transactionLog[idx]
+                            transactionLog[idx] = original.withRefundedAt(Date())
+                            pendingRefundOriginalEntryId = nil
+                        }
                         saveTransactionLog()
                     }
                 } else {

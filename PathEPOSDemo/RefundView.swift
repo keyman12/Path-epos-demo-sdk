@@ -1,15 +1,17 @@
 import SwiftUI
 
-/// Refund screen: identical layout to Payment but titled "Refund". Selecting Card sends a Refund transaction to the Pico (same format as Sale, cmd: Refund).
+/// Refund screen: refund method is fixed by original transaction (cash sale → cash refund only; card sale → card refund only).
 struct RefundView: View {
     let entry: TerminalTransactionLogEntry
     let onDismiss: () -> Void
     
-    @State private var selectedPaymentMethod: PaymentMethod?
+    @StateObject private var ble = BLEUARTManager.shared
     @State private var showingRefundCard = false
     @Environment(\.dismiss) private var dismiss
     
     private let primaryColor = Color(hex: "#3B9F40")
+    /// Refund method is fixed: cash sale → cash only, card sale → card only.
+    private var refundMethod: PaymentMethod { entry.isCash ? .cash : .card }
     
     var body: some View {
         NavigationView {
@@ -44,23 +46,16 @@ struct RefundView: View {
                         .cornerRadius(12)
                         
                         VStack(spacing: 16) {
-                            Text("Select Refund Method")
+                            Text("Refund method")
                                 .font(.title2)
                                 .fontWeight(.semibold)
-                            
-                            HStack(spacing: 20) {
-                                PaymentMethodButton(
-                                    method: .cash,
-                                    isSelected: selectedPaymentMethod == .cash,
-                                    onTap: { selectedPaymentMethod = .cash }
-                                )
-                                
-                                PaymentMethodButton(
-                                    method: .card,
-                                    isSelected: selectedPaymentMethod == .card,
-                                    onTap: { selectedPaymentMethod = .card }
-                                )
-                            }
+                            // Only show the method that matches the original transaction
+                            PaymentMethodButton(
+                                method: refundMethod,
+                                isSelected: true,
+                                onTap: {}
+                            )
+                            .disabled(true)
                         }
                         
                         Spacer(minLength: 12)
@@ -73,10 +68,11 @@ struct RefundView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 12) {
                     Button(action: {
-                        if selectedPaymentMethod == .cash {
+                        if refundMethod == .cash {
+                            ble.recordCashRefund(originalEntry: entry)
                             dismiss()
                             onDismiss()
-                        } else if selectedPaymentMethod == .card {
+                        } else {
                             showingRefundCard = true
                         }
                     }) {
@@ -86,10 +82,9 @@ struct RefundView: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(selectedPaymentMethod != nil ? Color(hex: "#FF5252") : Color.gray)
+                            .background(Color(hex: "#FF5252"))
                             .cornerRadius(12)
                     }
-                    .disabled(selectedPaymentMethod == nil)
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -165,7 +160,7 @@ struct RefundCardView: View {
         }
         .padding()
         .onAppear {
-            ble.startRefund(amountMinor: entry.amountMinor, currency: entry.currency, originalReqId: entry.reqId)
+            ble.startRefund(amountMinor: entry.amountMinor, currency: entry.currency, originalReqId: entry.reqId, originalEntryId: entry.id)
         }
         .alert("Timeout waiting for terminal", isPresented: $ble.showTimeoutPrompt) {
             Button("Continue", role: .none) { ble.continueWaiting() }
